@@ -1,1 +1,1 @@
-Youtube clone app in development phase as of now
+Youtube backend clone is in development phase as of now
