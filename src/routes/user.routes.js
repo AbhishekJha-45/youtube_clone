@@ -5,6 +5,7 @@ import {
   logoutUser,
   refreshAccessToken,
   registerUser,
+
 } from "../controllers/user.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJwt } from "../middlewares/auth.middleware.js";
@@ -13,8 +14,8 @@ const router = Router();
 router
   .route("/register")
   .get((_, res) => res.json({ message: "Register route" }));
-router.route("/login").get((_, res) => res.json({ message: "Login route" }));
-router.route("/logout").get((_, res) => res.json({ message: "Logout route" }));
+router.route("/login").get((_, res) => res.json({ message: "get request for Login route recieved" }));
+router.route("/logout").get((_, res) => res.json({ message: "get request for Logout route recieved" }));
 //post routes
 router.route("/register").post(
   upload.fields([

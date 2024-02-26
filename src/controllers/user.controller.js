@@ -4,6 +4,7 @@ import { User } from "../models/user.model.js";
 import { uploadToCloudinary } from "../utils/cloudinary.js";
 import { APiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 const options = {
   httpOnly: true,
   secure: true,
@@ -19,7 +20,7 @@ const generateAccessAndRefreshTokens = async (userId) => {
     // console.log("refreshToken", refreshToken);
     return { accessToken, refreshToken };
   } catch (error) {
-    throw new ApiError(500, "Failed to generate access and refresh tokens");
+    throw new ApiError(500, "Failed to generate access or refresh tokens");
   }
 };
 
@@ -83,39 +84,44 @@ const registerUser = asyncHandler(async (req, res) => {
 });
 
 const loginUser = asyncHandler(async (req, res) => {
-  const { username, password, email } = req.body;
-  if (!(username || email)) {
-    throw new ApiError(400, "Username or email is required");
-  }
+  try {
+    const { username, password, email } = req.body;
+    if (!(username || email)) {
+      throw new ApiError(400, "Username or email is required");
+    }
 
-  const isExistingUser = await User.findOne({ $or: [{ username }, { email }] });
-  if (!isExistingUser) {
-    throw new ApiError(404, "User not found");
-  }
+    const isExistingUser = await User.findOne({
+      $or: [{ username }, { email }],
+    });
+    if (!isExistingUser) {
+      throw new ApiError(404, "User not found");
+    }
 
-  const isPasswordValid = await isExistingUser.isPasswordCorrect(password);
-  if (!isPasswordValid) {
-    throw new ApiError(401, "Invalid password");
-  }
+    const isPasswordValid = await isExistingUser.isPasswordCorrect(password);
+    if (!isPasswordValid) {
+      throw new ApiError(401, "Invalid password");
+    }
 
-  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
-    isExistingUser._id
-  );
-  const loggedInUser = await User.findById(isExistingUser._id).select(
-    "-password -refreshToken"
-  );
-
-  return res
-    .status(200)
-    .cookie("refreshToken", refreshToken, options)
-    .cookie("accessToken", accessToken, options)
-    .json(
-      new APiResponse(200, "User logged in Successfully", {
-        user: loggedInUser,
-        accessToken,
-        refreshToken,
-      })
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+      isExistingUser._id
     );
+    const loggedInUser = await User.findById(isExistingUser._id).select(
+      "-password -refreshToken"
+    );
+    return res
+      .status(200)
+      .cookie("refreshToken", refreshToken, options)
+      .cookie("accessToken", accessToken, options)
+      .json(
+        new APiResponse(200, "User logged in Successfully", {
+          user: loggedInUser,
+          accessToken,
+          refreshToken,
+        })
+      );
+  } catch (error) {
+    throw new ApiError(500, "Failed to login user :(");
+  }
 });
 
 const logoutUser = asyncHandler(async (req, res) => {
@@ -273,6 +279,138 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     .status(200)
     .json(new APiResponse(200, user, "User cover image updated successfully"));
 });
+
+const getUserChannelProfile = asyncHandler(async (req, res) => {
+  try {
+    const { username } = req.params;
+    if (!username?.trim()) {
+      throw new ApiError(400, "Username is required");
+    }
+    const channel = await User.aggregate([
+      //matched user by username
+      { $match: username?.toLowerCase() },
+      {
+        $lookup: {
+          from: "subscriptions",
+          localField: "_id",
+          foreignField: "channel",
+          as: "subscribers",
+        },
+      },
+      {
+        $lookup: {
+          from: "subscriptions",
+          localField: "_id",
+          foreignField: "subscriber",
+          as: "subscribedTo",
+        },
+      },
+      {
+        $addFields: {
+          //calculated subscribers count and channels subscribed to count
+          subscribersCount: { $size: "$subscribers" },
+          channelsSubscribedToCount: { $size: "$subscribedTo" },
+          isSubscribed: {
+            $cond: {
+              if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+              then: true,
+              else: false,
+            },
+          },
+        },
+      },
+      {
+        $project: {
+          subscribers: 1,
+          subscribedTo: 1,
+          subscribersCount: 1,
+          channelsSubscribedToCount: 1,
+          isSubscribed: 1,
+          avatar: 1,
+          coverImage: 1,
+          email: 1,
+          fullName: 1,
+          username: 1,
+        },
+      },
+    ]);
+    if (!channel) {
+      throw new ApiError(404, "Channel not found");
+    }
+    console.log("from user controller userprofile", channel);
+    return res
+      .status(200)
+      .json(
+        new APiResponse(200, channel[0], "User profile fetched successfully")
+      );
+  } catch (error) {
+    throw new ApiError(500, "Failed to get user channel profile");
+  }
+});
+const getWatchHistory = asyncHandler(async (req, res) => {
+  try {
+    const user = await User.aggregate([
+      {
+        $match: new mongoose.Types.ObjectId(req.user._id),
+      },
+      {
+        $lookup: {
+          from: "videos",
+          localField: "watchHistory",
+          foreignField: "_id",
+          as: "watchHistory",
+          //nested lookup to get the owner of the video along witht he video
+          pipeline: [
+            {
+              $lookup: {
+                from: "users",
+                localField: "owner",
+                foreignField: "_id",
+                as: "owner",
+                pipeline: [
+                  {
+                    $project: {
+                      username: 1,
+                      fullName: 1,
+                      avatar: 1,
+                    },
+                  },
+                ],
+              },
+            },
+            //for the convinent of the client, we are adding the owner of the video to the video object
+            {
+              $addFields: {
+                owner: {
+                  $first: "$owner",
+                },
+              },
+            },
+          ],
+        },
+      },
+      {
+        $project: {
+          watchHistory: 1,
+        },
+      },
+    ]);
+    if (!user) {
+      throw new ApiError(404, "Channel not found");
+    }
+    return res
+      .status(200)
+      .json(
+        new APiResponse(
+          200,
+          user[0].watchHistory,
+          "User watch history fetched successfully"
+        )
+      );
+  } catch (error) {
+    throw new ApiError(500, "Failed to get user watch history");
+  }
+});
 export {
   registerUser,
   loginUser,
@@ -283,4 +421,6 @@ export {
   updateAccountDetails,
   updateUserAvatar,
   updateUserCoverImage,
+  getUserChannelProfile,
+  getWatchHistory,
 };
