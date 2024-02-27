@@ -128,7 +128,7 @@ const logoutUser = asyncHandler(async (req, res) => {
   await User.findByIdAndUpdate(
     req.user._id,
     {
-      $set: { refreshToken: undefined },
+      $unset: { refreshToken: 1 },
     },
     { new: true }
   );
@@ -279,7 +279,7 @@ const updateUserCoverImage = asyncHandler(async (req, res) => {
     .status(200)
     .json(new APiResponse(200, user, "User cover image updated successfully"));
 });
-
+//aggregation pipelines usage below
 const getUserChannelProfile = asyncHandler(async (req, res) => {
   try {
     const { username } = req.params;
@@ -351,7 +351,9 @@ const getWatchHistory = asyncHandler(async (req, res) => {
   try {
     const user = await User.aggregate([
       {
-        $match: new mongoose.Types.ObjectId(req.user._id),
+        $match: {
+          _id: new mongoose.Types.ObjectId(req.user._id),
+        },
       },
       {
         $lookup: {
@@ -359,7 +361,6 @@ const getWatchHistory = asyncHandler(async (req, res) => {
           localField: "watchHistory",
           foreignField: "_id",
           as: "watchHistory",
-          //nested lookup to get the owner of the video along witht he video
           pipeline: [
             {
               $lookup: {
@@ -370,15 +371,14 @@ const getWatchHistory = asyncHandler(async (req, res) => {
                 pipeline: [
                   {
                     $project: {
-                      username: 1,
                       fullName: 1,
+                      username: 1,
                       avatar: 1,
                     },
                   },
                 ],
               },
             },
-            //for the convinent of the client, we are adding the owner of the video to the video object
             {
               $addFields: {
                 owner: {
@@ -389,15 +389,14 @@ const getWatchHistory = asyncHandler(async (req, res) => {
           ],
         },
       },
-      {
-        $project: {
-          watchHistory: 1,
-        },
-      },
     ]);
-    if (!user) {
-      throw new ApiError(404, "Channel not found");
+
+    if (!user || user.length === 0) {
+      return res
+        .status(404)
+        .json(new APiResponse(404, null, "Channel not found"));
     }
+
     return res
       .status(200)
       .json(
@@ -408,9 +407,13 @@ const getWatchHistory = asyncHandler(async (req, res) => {
         )
       );
   } catch (error) {
-    throw new ApiError(500, "Failed to get user watch history");
+    console.error("Error:", error);
+    return res
+      .status(500)
+      .json(new APiResponse(500, null, "Failed to get user watch history"));
   }
 });
+
 export {
   registerUser,
   loginUser,
