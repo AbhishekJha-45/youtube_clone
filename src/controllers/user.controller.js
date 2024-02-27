@@ -143,46 +143,40 @@ const logoutUser = asyncHandler(async (req, res) => {
     .json(new APiResponse(200, "User logged out successfully"));
 });
 
-const refreshAccessToken = asyncHandler(async (req, res) => {
+const refreshToken = asyncHandler(async (req, res) => {
   try {
     const incomingRefreshToken =
       req.cookies.refreshToken || req.body.refreshToken;
     if (!incomingRefreshToken) {
-      throw new ApiError(401, "Unauthorized request");
+      return res.status(401).json(new APiResponse(401, "Unauthorized request"));
     }
-
     const decodedToken = jwt.verify(
       incomingRefreshToken,
-      process.env.REFRESH_TOKEN_SECRET,
-      (err) => {
-        if (err) {
-          throw new ApiError(401, "Invalid refresh token");
-        }
-      }
+      process.env.REFRESH_TOKEN_SECRET
     );
-
-    const user = await User.findById(decodedToken._id);
+    const user = await User.findById(decodedToken?._id);
     if (!user) {
-      throw new ApiError(401, "invalid refresh token");
+      return res.status(404).json(new APiResponse(404, "User not found"));
     }
 
     if (incomingRefreshToken !== user.refreshToken) {
-      throw new ApiError(401, "Refresh token is expired or used");
+      return res
+        .status(401)
+        .json(new APiResponse(401, "Refresh token is expired or used"));
     }
 
     const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
-      user._id
+      user?._id
     );
     return res
       .status(200)
       .cookie("refreshToken", refreshToken, options)
       .cookie("accessToken", accessToken, options)
       .json(
-        new APiResponse(
-          200,
-          { accessToken, refreshToken },
-          "Access Token refreshed"
-        )
+        new APiResponse(200, "Access Token refreshed successfully", {
+          accessToken,
+          refreshToken,
+        })
       );
   } catch (error) {
     throw new ApiError(401, error?.message || "Invalid refresh token");
@@ -197,26 +191,28 @@ const changeCurrentUserPassword = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
   const isPasswordCorrect = await user.isPasswordCorrect(oldPassword);
   if (!isPasswordCorrect) {
-    throw new ApiError(400, "Invalid old password");
+    res.status(400).json(new APiResponse(400, "Invalid old password"));
   }
 
   user.password = newPassword;
   await user.save({ validateBeforeSave: false });
   return res
     .status(200)
-    .json(new APiResponse(200, {}, "Password changed successfully"));
+    .json(new APiResponse(200, "Password changed successfully"));
 });
 
 const getCurrentUser = asyncHandler(async (req, res) => {
   return res
     .status(200)
-    .json(new APiResponse(200, req.user, "Current user fetched successfully"));
+    .json(new APiResponse(200, "Current user fetched successfully", req.user));
 });
 
 const updateAccountDetails = asyncHandler(async (req, res) => {
   const { fullName, email } = req.body;
   if (!(fullName || email)) {
-    throw new ApiError(400, "Full name and email are required");
+    res
+      .status(400)
+      .json(new APiResponse(400, "Full name and email are required"));
   }
   const user = await User.findByIdAndUpdate(
     req.user._id,
@@ -226,11 +222,11 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     { new: true }
   ).select("-password");
   if (!user) {
-    throw new ApiError(500, "Failed to update user details");
+    throw new APiResponse(500, "Failed to update user details");
   }
   return res
     .status(200)
-    .json(new APiResponse(200, user, "Account details updated successfully"));
+    .json(new APiResponse(200, "Account details updated successfully", user));
 });
 const updateUserAvatar = asyncHandler(async (req, res) => {
   const avatarLocalPath = req.file?.avatar[0]?.path;
@@ -287,8 +283,11 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
       throw new ApiError(400, "Username is required");
     }
     const channel = await User.aggregate([
-      //matched user by username
-      { $match: username?.toLowerCase() },
+      {
+        $match: {
+          username: username?.toLowerCase().trim(),
+        },
+      },
       {
         $lookup: {
           from: "subscriptions",
@@ -307,9 +306,12 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
       },
       {
         $addFields: {
-          //calculated subscribers count and channels subscribed to count
-          subscribersCount: { $size: "$subscribers" },
-          channelsSubscribedToCount: { $size: "$subscribedTo" },
+          subscribersCount: {
+            $size: "$subscribers",
+          },
+          channelsSubscribedToCount: {
+            $size: "$subscribedTo",
+          },
           isSubscribed: {
             $cond: {
               if: { $in: [req.user?._id, "$subscribers.subscriber"] },
@@ -321,30 +323,29 @@ const getUserChannelProfile = asyncHandler(async (req, res) => {
       },
       {
         $project: {
-          subscribers: 1,
-          subscribedTo: 1,
+          fullName: 1,
+          username: 1,
           subscribersCount: 1,
           channelsSubscribedToCount: 1,
           isSubscribed: 1,
           avatar: 1,
           coverImage: 1,
           email: 1,
-          fullName: 1,
-          username: 1,
         },
       },
     ]);
-    if (!channel) {
-      throw new ApiError(404, "Channel not found");
-    }
     console.log("from user controller userprofile", channel);
+    if (!channel || channel.length === 0) {
+      return res.status(404).json(new ApiError(404, "", "Channel not found"));
+      // throw new ApiError(404, "Channel not found");
+    }
     return res
       .status(200)
       .json(
-        new APiResponse(200, channel[0], "User profile fetched successfully")
+        new APiResponse(200, "User profile fetched successfully", channel[0])
       );
   } catch (error) {
-    throw new ApiError(500, "Failed to get user channel profile");
+    res.status(500).json(new ApiError(500, "Failed to get user profile", null));
   }
 });
 const getWatchHistory = asyncHandler(async (req, res) => {
@@ -392,9 +393,7 @@ const getWatchHistory = asyncHandler(async (req, res) => {
     ]);
 
     if (!user || user.length === 0) {
-      return res
-        .status(404)
-        .json(new APiResponse(404, null, "Channel not found"));
+      return res.status(404).json(new ApiError(404, "Channel not found", null));
     }
 
     return res
@@ -402,15 +401,15 @@ const getWatchHistory = asyncHandler(async (req, res) => {
       .json(
         new APiResponse(
           200,
-          user[0].watchHistory,
-          "User watch history fetched successfully"
+          "User watch history fetched successfully",
+          user[0].watchHistory
         )
       );
   } catch (error) {
     console.error("Error:", error);
     return res
       .status(500)
-      .json(new APiResponse(500, null, "Failed to get user watch history"));
+      .json(new ApiError(500, "Failed to get user watch history"));
   }
 });
 
@@ -418,7 +417,7 @@ export {
   registerUser,
   loginUser,
   logoutUser,
-  refreshAccessToken,
+  refreshToken,
   changeCurrentUserPassword,
   getCurrentUser,
   updateAccountDetails,

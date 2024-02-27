@@ -6,7 +6,7 @@ import {
   getWatchHistory,
   loginUser,
   logoutUser,
-  refreshAccessToken,
+  refreshToken,
   registerUser,
   updateAccountDetails,
   updateUserAvatar,
@@ -40,9 +40,9 @@ router.route("/register").post(
 router.route("/login").post(loginUser);
 //secured routes
 router.route("/logout").post(verifyJwt, logoutUser);
-router.route("/refresh-token").post(refreshAccessToken);
+router.route("/refresh-token").post(verifyJwt, refreshToken);
 router.route("/change-password").post(verifyJwt, changeCurrentUserPassword);
-router.route("/current-user").post(verifyJwt, getCurrentUser);
+router.route("/current-user").get(verifyJwt, getCurrentUser);
 router.route("/update-account").patch(verifyJwt, updateAccountDetails);
 router
   .route("/update-avatar")
