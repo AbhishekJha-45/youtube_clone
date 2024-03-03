@@ -93,13 +93,13 @@ const loginUser = asyncHandler(async (req, res) => {
     const isExistingUser = await User.findOne({
       $or: [{ username }, { email }],
     });
-    if (!isExistingUser) {
+    if (!isExistingUser || isExistingUser.length === 0) {
       throw new ApiError(404, "User not found");
     }
 
     const isPasswordValid = await isExistingUser.isPasswordCorrect(password);
     if (!isPasswordValid) {
-      throw new ApiError(401, "Invalid password");
+      return res.status(401).json(new APiResponse(401, "Invalid password"));
     }
 
     const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
