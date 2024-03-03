@@ -1,7 +1,11 @@
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { Video } from "../models/video.model.js";
-import { uploadToCloudinary } from "../utils/cloudinary.js";
+import {
+  deleteMediafromCloudinary,
+  uploadToCloudinary,
+} from "../utils/cloudinary.js";
+import { APiResponse } from "../utils/ApiResponse.js";
 
 const uploadVideo = asyncHandler(async (req, res) => {
   try {
@@ -71,7 +75,7 @@ const getAllVideosOfCurrentUser = asyncHandler(async (req, res) => {
     throw new ApiError(500, "Failed to fetch videos");
   }
 });
-const getOneVideo = asyncHandler(async (req, res) => {
+const getVideoById = asyncHandler(async (req, res) => {
   try {
     const { videoId } = req.body;
     if (!videoId) {
@@ -81,7 +85,9 @@ const getOneVideo = asyncHandler(async (req, res) => {
     if (!video || video.length === 0) {
       throw new ApiError(404, "Video not found");
     }
-    return res.status(200).json(video);
+    return res
+      .status(200)
+      .json(new APiResponse(200, "Successfully fetched video", video));
   } catch (error) {
     throw new ApiError(500, "Failed to get video");
   }
@@ -102,4 +108,24 @@ const deleteVideo = asyncHandler(async (req, res) => {
     success: true,
   });
 });
-export { uploadVideo, getAllVideosOfCurrentUser, deleteVideo, getOneVideo };
+//need fixes not completed yet
+const deleteFromCloudinary = asyncHandler(async (req, res) => {
+  const { url } = req.body;
+  if (!url) {
+    return new ApiError(400, "Url is required");
+  }
+
+  const Delete = await deleteMediafromCloudinary(url);
+  return res.status(200).json(Delete);
+});
+
+
+
+
+export {
+  uploadVideo,
+  getAllVideosOfCurrentUser,
+  deleteVideo,
+  getVideoById,
+  deleteFromCloudinary,
+};

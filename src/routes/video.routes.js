@@ -1,8 +1,9 @@
 import { Router } from "express";
 import {
+  deleteFromCloudinary,
   deleteVideo,
   getAllVideosOfCurrentUser,
-  getOneVideo,
+  getVideoById,
   uploadVideo,
 } from "../controllers/video.controller.js";
 import { verifyJwt } from "../middlewares/auth.middleware.js";
@@ -19,6 +20,7 @@ router.route("/upload").post(
 
 router.route("/get-all-videos").get(getAllVideosOfCurrentUser);
 router.route("/delete-video").post(deleteVideo);
-router.route("/get-video").get(getOneVideo);
+router.route("/get-video").get(getVideoById);
+router.route("/delete-from-cloudinary").post(deleteFromCloudinary);
 
 export default router;
