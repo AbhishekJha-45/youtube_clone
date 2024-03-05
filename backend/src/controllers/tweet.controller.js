@@ -1,7 +1,7 @@
 import { Tweet } from "../models/tweet.model.js";
 import { APiResponse } from "../utils/ApiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-
+import { ApiError } from "../utils/ApiError.js";
 const createNewTweet = asyncHandler(async (req, res) => {
   try {
     // get tweet content from request body
@@ -45,4 +45,19 @@ const deleteTweet = asyncHandler(async (req, res) => {
     .status(200)
     .json(new APiResponse(200, "Tweet deleted successfully"));
 });
-export { createNewTweet, deleteTweet };
+
+const getUserTweets = asyncHandler(async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const tweets = await Tweet.find({ owner: userId });
+    if (!tweets || tweets.length === 0) {
+      return res.status(400).json(new APiResponse(400, "No tweets found"));
+    }
+    return res.status(200).json(tweets);
+  } catch (error) {
+    return res
+      .status(500)
+      .json(new ApiError(500, error.message || "Failed to get tweets"));
+  }
+});
+export { createNewTweet, deleteTweet ,getUserTweets};
