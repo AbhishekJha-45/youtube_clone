@@ -28,7 +28,6 @@ The YouTube Clone App replicates key features of the popular video-sharing platf
 
 - **Next.js:** React framework for server-side rendering, routing, and building dynamic user interfaces.
 - **Tailwind CSS:** Utility-first CSS framework for rapid UI development, providing customizable styles and components.
-- **[Other Frontend Technologies]:** [Description of additional frontend technologies being used, if any]
 
 ## Environment Variables
 
